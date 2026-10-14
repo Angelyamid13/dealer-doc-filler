@@ -637,6 +637,8 @@ function vDashboard(){
  * values, and every auto-filled field still requires manual confirmation
  * via the existing "verify from photo" flags. */
 let tesseractLoading = null;
+/* Last OCR run, for the "What the app read" debug view (not saved to storage). */
+let lastOcr = null;
 function loadTesseract(){
   if (window.Tesseract) return Promise.resolve(window.Tesseract);
   if (tesseractLoading) return tesseractLoading;
@@ -649,6 +651,42 @@ function loadTesseract(){
     document.head.appendChild(s);
   });
   return tesseractLoading;
+}
+/* Upscale + grayscale + autocontrast the photo before OCR.
+ * Tesseract reads small/low-contrast phone photos much better this way.
+ * Falls back to the original image if anything goes wrong. */
+function preprocessForOCR(dataUrl){
+  return new Promise((resolve)=>{
+    try{
+      const img = new Image();
+      img.onload = ()=>{
+        try{
+          const scale = Math.min(2.5, 1800/Math.max(img.width, img.height));
+          const w = Math.max(1, Math.round(img.width*scale));
+          const h = Math.max(1, Math.round(img.height*scale));
+          const cv = document.createElement('canvas'); cv.width = w; cv.height = h;
+          const ctx = cv.getContext('2d');
+          ctx.drawImage(img, 0, 0, w, h);
+          const idata = ctx.getImageData(0, 0, w, h), d = idata.data;
+          const lum = new Uint8ClampedArray(w*h);
+          let mn = 255, mx = 0;
+          for (let i=0;i<w*h;i++){
+            const l = 0.299*d[i*4] + 0.587*d[i*4+1] + 0.114*d[i*4+2];
+            lum[i] = l; if (l<mn) mn = l; if (l>mx) mx = l;
+          }
+          const range = Math.max(1, mx-mn);
+          for (let i=0;i<w*h;i++){
+            const v = Math.round((lum[i]-mn)/range*255);
+            d[i*4] = d[i*4+1] = d[i*4+2] = v; d[i*4+3] = 255;
+          }
+          ctx.putImageData(idata, 0, 0);
+          resolve(cv.toDataURL('image/jpeg', 0.92));
+        }catch(e){ resolve(dataUrl); }
+      };
+      img.onerror = ()=>resolve(dataUrl);
+      img.src = dataUrl;
+    }catch(e){ resolve(dataUrl); }
+  });
 }
 async function runLicenseOCR(c){
   const statusEl = ()=>document.getElementById('cf_ocr_status');
@@ -666,13 +704,15 @@ async function runLicenseOCR(c){
     });
     let text = '';
     try{
-      const r = await worker.recognize(c.idPhoto);
+      const ocrImg = await preprocessForOCR(c.idPhoto);
+      const r = await worker.recognize(ocrImg);
       text = (r && r.data && r.data.text) || '';
     } finally {
       await worker.terminate();
     }
     const fields = parseLicenseText(text);
     const keys = Object.keys(fields);
+    lastOcr = { cid: c.id, text, found: keys };
     if (!keys.length){
       setStatus('Could not read anything useful — photo may be blurry, angled, or cropped. Type the fields manually.');
       audit('OCR no result', c.name || '(new customer)');
@@ -754,6 +794,11 @@ function custForm(id){
         <p><input type="file" id="cf_photo" accept="image/*"></p>
         ${c.idPhoto?`<p><button type="button" class="btn sm" id="cf_ocr">📷 Auto-read from photo</button>
         <span id="cf_ocr_status" style="font-size:12px;color:var(--mut)"></span></p>`:''}
+        ${lastOcr && lastOcr.cid===c.id ? `<details style="margin-top:6px;font-size:12px">
+          <summary style="cursor:pointer;color:var(--mut)">What the app read from the photo (tap to expand)</summary>
+          <pre style="white-space:pre-wrap;background:#f6f6f4;border:1px solid var(--line);border-radius:6px;padding:8px;max-height:180px;overflow:auto">${esc(lastOcr.text)||'(no text detected)'}</pre>
+          <p style="color:var(--mut);margin:4px 0 0">Parsed into fields: ${lastOcr.found.length?esc(lastOcr.found.join(', ')):'nothing'}</p>
+        </details>`:''}
         <p style="font-size:12px;color:var(--mut)">Photo is stored in this browser only. Auto-read runs entirely on this device (the OCR engine downloads once — needs internet). Every auto-filled field must still be confirmed manually against the photo.</p>
       </fieldset></div>
     </div>
