@@ -730,7 +730,7 @@ async function runLicenseOCR(c){
       if (c.verify && c.verify[k]) continue;
       if (!c[k]){ c[k] = fields[k]; filled.push(k); }
     }
-    save(); custForm(c.id);
+    save(); custForm(c);
     audit('OCR auto-fill', (c.name || '(new customer)') + ': ' + (filled.join(', ') || 'nothing new'));
     const st = statusEl();
     if (st) st.textContent = filled.length
@@ -776,10 +776,15 @@ function dupName(c){
   const n = (c.name||'').trim().toLowerCase();
   return !!n && store.customers.some(x=>x.id!==c.id && (x.name||'').trim().toLowerCase()===n);
 }
-function custForm(id){
-  const c = id ? store.customers.find(x=>x.id===id) : {id:uid('c'), verify:{}};
+function custForm(idOrObj){
+  // Accepts a customer id, or the customer object itself (for not-yet-saved
+  // customers being edited, e.g. right after a photo upload or OCR run).
+  const c = (idOrObj && typeof idOrObj === 'object') ? idOrObj
+    : (idOrObj ? (store.customers.find(x=>x.id===idOrObj) || {id:idOrObj, verify:{}})
+               : {id:uid('c'), verify:{}});
+  const isNew = !store.customers.some(x=>x.id===c.id);
   const host = document.getElementById('custForm');
-  host.innerHTML = `<div class="panel"><h2>${id?'Edit':'New'} customer</h2>
+  host.innerHTML = `<div class="panel"><h2>${isNew?'New':'Edit'} customer</h2>
     ${dupName(c)?'<div class="notice"><b>Duplicate-name warning:</b> another customer already has this name. Verify you are not creating a duplicate.</div>':''}
     <div class="idwrap">
       <div><fieldset><legend>Details</legend><div class="row">
@@ -805,7 +810,7 @@ function custForm(id){
     <div style="display:flex;gap:8px"><button class="btn" id="cf_save">Save customer</button>
     <button class="btn ghost" id="cf_cancel">Cancel</button></div></div>`;
   host.querySelectorAll('[data-vf]').forEach(b=>b.onclick=()=>{
-    c.verify=c.verify||{}; c.verify[b.dataset.vf]=true; save(); custForm(c.id);
+    c.verify=c.verify||{}; c.verify[b.dataset.vf]=true; save(); custForm(c);
   });
   document.getElementById('cf_photo').onchange = e=>{
     const file = e.target.files[0]; if(!file) return;
@@ -816,7 +821,7 @@ function custForm(id){
       cv.width=img.width*s; cv.height=img.height*s;
       cv.getContext('2d').drawImage(img,0,0,cv.width,cv.height);
       c.idPhoto = cv.toDataURL('image/jpeg',0.8);
-      URL.revokeObjectURL(img.src); save(); custForm(c.id);
+      URL.revokeObjectURL(img.src); save(); custForm(c);
     };
     img.src = URL.createObjectURL(file);
   };
@@ -827,7 +832,7 @@ function custForm(id){
     c.notes=document.getElementById('cf_notes').value.trim();
     if(!c.name){alert('Name is required.');return;}
     if(!store.customers.some(x=>x.id===c.id)) store.customers.push(c);
-    save(); audit(id?'update customer':'create customer', c.name);
+    save(); audit(isNew?'create customer':'update customer', c.name);
     host.innerHTML=''; vCustomers();
   };
 }
