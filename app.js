@@ -9,8 +9,13 @@ const USERS = {
   sales:   { pw: 'sales123',   role: 'sales',   label: 'Sales' },
   finance: { pw: 'finance123', role: 'finance', label: 'Finance' },
 };
-/* field helper: F(id,x,y,w, opts, extra) ; opts: s=small a=amt c=checkbox g=sig q=required */
-const F = (id,x,y,w,o='',extra={}) => ({id,x,y,w,o,...extra});
+/* field helper: F(id,x,y,w, opts, extra) ; opts: s=small a=amt c=checkbox g=sig q=required
+ * Tolerates the options object being passed in the opts position (common slip),
+ * so f.o is always a string and f.o.includes() never throws. */
+const F = (id,x,y,w,o='',extra={}) => {
+  if (o && typeof o === 'object'){ extra = o; o = ''; }
+  return {id,x,y,w,o,...extra};
+};
 
 const TEMPLATES = [
 { id:'cos1', name:'Contract of Sale — page 1', img:'assets/loan-pg-1.jpg', orient:'portrait',
