@@ -1123,6 +1123,90 @@ function vAbout(){
   };
 }
 
+/* ================= demo mode (?demo=1) =================
+ * Seeds one fully-worked EXAMPLE deal (all fake data, clearly labeled) so a
+ * reviewer can see every filled document. Runs once, only when the store
+ * has no deals yet. Nothing here touches real customer data. */
+function demoSignature(){
+  const cv = document.createElement('canvas'); cv.width = 520; cv.height = 160;
+  const x = cv.getContext('2d');
+  x.strokeStyle = '#123f31'; x.lineWidth = 3; x.lineCap = 'round'; x.lineJoin = 'round';
+  x.beginPath();
+  let px = 36, py = 110; x.moveTo(px, py);
+  const wob = [[70,55],[105,120],[150,60],[195,118],[240,66],[285,116],[330,70],[375,112],[420,72],[470,108]];
+  for (const [qx, qy] of wob){ x.quadraticCurveTo(px, py, (px+qx)/2, (py+qy)/2); px = qx; py = qy; }
+  x.stroke();
+  x.beginPath(); x.moveTo(36, 138); x.quadraticCurveTo(260, 152, 492, 128); x.stroke();
+  return cv.toDataURL('image/png');
+}
+function seedDemo(){
+  store.settings = { dealerName: 'Wasatch Auto Sales', dealerPhone: '(801) 555-0147' };
+  const cust = { id: uid('c'), verify: {},
+    name: 'Miguel Hernández', dob: '03/22/1988',
+    streetAddress: '4567 W 3500 S', city: 'West Valley City', county: 'Salt Lake',
+    state: 'UT', zip: '84120', resPhone: '(801) 555-0134', busPhone: '(801) 555-0199',
+    email: 'miguel.h@example.com', dlNo: '123456789',
+    notes: 'EXAMPLE record — seeded by ?demo=1' };
+  const veh = { id: uid('v'), vin: 'JF2GTACC3JH276452', year: '2018', make: 'Subaru',
+    model: 'Crosstrek', trim: 'Premium', bodyType: 'SUV', engine: '2.0L H4', cyl: '4',
+    color: 'Crystal White Pearl', mileage: '50234', stockNo: 'P1842', condition: 'USED' };
+  store.customers.push(cust); store.vehicles.push(veh);
+  const today = todayISO();
+  const data = {
+    purchaserName: cust.name, streetAddress: cust.streetAddress, city: cust.city,
+    county: cust.county, state: cust.state, zip: cust.zip,
+    resPhone: cust.resPhone, busPhone: cust.busPhone, dlNo: cust.dlNo,
+    year: veh.year, make: veh.make, series: veh.model, bodyType: veh.bodyType,
+    cyl: veh.cyl, color: veh.color, vin: veh.vin, odometer: veh.mileage,
+    stockNo: veh.stockNo, cond: veh.condition,
+    dateOfSale: today, delDate: today, salesperson: 'Abraham Valadez',
+    dealerName: store.settings.dealerName, titledIn: cust.name, status: 'ready',
+    discChoice: 'A', intRateFrom: '8.9', intRateTo: '11.9',
+    termFrom: '48', termTo: '72', payFrom: '350', payTo: '450',
+    line1: '18995', line2: '899', line7: '500', taxRate: '7.25',
+    tradeYearMake: '2015 Honda Civic', tradeOdometer: '98700', tradeSeries: 'LX',
+    tradeBodyType: 'Sedan', tradeVin: '2HGFB2F50FH512345',
+    tradeAddress: '4567 W 3500 S, West Valley City, UT 84120',
+    balanceOwedTo: 'Granite Credit Union', payoffVerifiedBy: 'L. Gomez',
+    goodUntil: '11/15/2026', dateOfVerification: today, accNo: '882134',
+    line10: '8000', line11: '5200', line13: '1500',
+    line16: '1899', line17: '399', line23: '285', line24: '120',
+    line25: '45', line26: '8',
+    finRate: '9.9', finMonths: '60',
+    payStartMonth: '12', payStartDay: '01', payStartYear: '2026',
+    insuranceCo: 'Bear River Mutual', policyNo: 'BRM-88213', finInitials: 'MH',
+    tilDueDay: '1',
+    odoUnit: 'miles', odoCert: 'actual',
+    odoTAddr: '789 W Dealer Way', odoTCity: 'West Valley City',
+    odoTState: 'UT', odoTZip: '84119',
+    jSerial: veh.vin, jLicense: '8X7K2P', jTab: 'T-4412', jExp: '11/26', jKey: 'K-209',
+    jPurchFrom: 'Wasatch Auto Sales', jPurchAddr: '789 W Dealer Way',
+    jPurchCity: 'West Valley City', jPurchState: 'UT', jPurchZip: '84119',
+    jPurchPhone: '(801) 555-0147', jCostEquity: '14500', jPayoff: '5200',
+    jCommission: '450', jRSNo: 'RS-2201', jAmtDOL: '285', jCertTitle: '6',
+    jRegist: '120', jTotalOfficial: '411', jInsCo: 'Bear River Mutual', jSmog: '45',
+    jJacketTotal: '18842.67', jRemCash: '0', jPayableAmt: '399.42',
+    jPayableOn: '1st', jPayableYr: '26', jBeginOn: '12/01/2026',
+    sigDate: today,
+    docReg: '1', docOdo: '1', docPayoff: '1', titleChk: '1',
+  };
+  const sig = demoSignature();
+  const deal = { id: uid('d'), customerId: cust.id, vehicleId: veh.id, data,
+    signatures: { sig_purchaser: sig, sig_seller: sig, sig_lender: sig, sig_buyer: sig },
+    checklist: {}, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
+  for (let i = 0; i < 24; i++){
+    if (![5, 11, 17, 22].includes(i)){ deal.checklist[i] = true; deal.data['jk'+i] = '1'; }
+  }
+  store.deals.push(deal);
+  save();
+  audit('demo seed', 'example deal created (?demo=1)');
+}
+if (typeof location !== 'undefined'
+    && new URLSearchParams(location.search).get('demo') === '1'
+    && store.deals.length === 0){
+  try { seedDemo(); } catch(e){ console.warn('demo seed failed', e); }
+}
+
 /* ================= login / init ================= */
 function doLogin(){
   const u=document.getElementById('loginUser').value.trim(), p=document.getElementById('loginPass').value;
