@@ -1,6 +1,7 @@
 /* DealerDoc Filler v2 — application logic (ES module). */
 import { num, has, money, round2, computeContract, isCalcId,
          monthlyPayment, loanTotals, isValidVIN, dealDerived } from './calc.js';
+import { parseLicenseText } from './ocr.js';
 
 /* ================= constants ================= */
 const USERS = {
@@ -443,7 +444,7 @@ const FORM = [
  ]],
 ];
 const CUST_FIELDS = [
-  {id:'name',label:'Full name',req:1},{id:'streetAddress',label:'Street address'},{id:'city',label:'City'},
+  {id:'name',label:'Full name',req:1},{id:'dob',label:'Date of birth'},{id:'streetAddress',label:'Street address'},{id:'city',label:'City'},
   {id:'county',label:'County'},{id:'state',label:'State'},{id:'zip',label:'ZIP'},
   {id:'resPhone',label:'Res. phone'},{id:'busPhone',label:'Bus. phone'},{id:'email',label:'Email'},
   {id:'ssn',label:'SSN'},{id:'dlNo',label:"Driver's license #"},
@@ -628,6 +629,81 @@ function vDashboard(){
   draw();
 }
 
+/* ================= driver's license OCR =================
+ * Auto-reads the customer's ID photo with Tesseract.js (client-side only —
+ * the photo never leaves this device). Lazy-loads the engine from CDN on
+ * first use, so the app still works offline until OCR is requested.
+ * Parsed fields fill BLANK inputs only, never overwrite manually-verified
+ * values, and every auto-filled field still requires manual confirmation
+ * via the existing "verify from photo" flags. */
+let tesseractLoading = null;
+function loadTesseract(){
+  if (window.Tesseract) return Promise.resolve(window.Tesseract);
+  if (tesseractLoading) return tesseractLoading;
+  tesseractLoading = new Promise((resolve, reject)=>{
+    const s = document.createElement('script');
+    s.src = 'https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js';
+    s.onload = ()=> window.Tesseract ? resolve(window.Tesseract)
+      : reject(new Error('OCR engine failed to initialize.'));
+    s.onerror = ()=> reject(new Error('Could not download the OCR engine — check your internet connection and retry.'));
+    document.head.appendChild(s);
+  });
+  return tesseractLoading;
+}
+async function runLicenseOCR(c){
+  const statusEl = ()=>document.getElementById('cf_ocr_status');
+  const setStatus = t => { const el = statusEl(); if (el) el.textContent = t; };
+  const btn = document.getElementById('cf_ocr');
+  if (btn) btn.disabled = true;
+  try{
+    setStatus('Loading OCR engine…');
+    const T = await loadTesseract();
+    setStatus('Reading photo… 0%');
+    const oem = (T.OEM && T.OEM.LSTM != null) ? T.OEM.LSTM : undefined;
+    const worker = await T.createWorker('eng', oem, {
+      logger: m => { if (m.status === 'recognizing text' && m.progress != null)
+        setStatus('Reading photo… ' + Math.round(m.progress * 100) + '%'); }
+    });
+    let text = '';
+    try{
+      const r = await worker.recognize(c.idPhoto);
+      text = (r && r.data && r.data.text) || '';
+    } finally {
+      await worker.terminate();
+    }
+    const fields = parseLicenseText(text);
+    const keys = Object.keys(fields);
+    if (!keys.length){
+      setStatus('Could not read anything useful — photo may be blurry, angled, or cropped. Type the fields manually.');
+      audit('OCR no result', c.name || '(new customer)');
+      return;
+    }
+    // Preserve anything already typed; fill blanks only; never touch verified fields.
+    for (const f of CUST_FIELDS){
+      const inp = document.getElementById('cf_' + f.id);
+      if (inp) c[f.id] = inp.value.trim();
+    }
+    const notesInp = document.getElementById('cf_notes');
+    if (notesInp) c.notes = notesInp.value.trim();
+    const filled = [];
+    for (const k of keys){
+      if (c.verify && c.verify[k]) continue;
+      if (!c[k]){ c[k] = fields[k]; filled.push(k); }
+    }
+    save(); custForm(c.id);
+    audit('OCR auto-fill', (c.name || '(new customer)') + ': ' + (filled.join(', ') || 'nothing new'));
+    const st = statusEl();
+    if (st) st.textContent = filled.length
+      ? 'Auto-filled: ' + filled.join(', ') + ' — confirm each against the photo.'
+      : 'Fields already have values — nothing new to fill. Confirm each against the photo.';
+  }catch(err){
+    setStatus('OCR failed: ' + (err && err.message ? err.message : err));
+  }finally{
+    const b = document.getElementById('cf_ocr');
+    if (b) b.disabled = false;
+  }
+}
+
 /* ================= customers ================= */
 function vCustomers(){
   const el = document.getElementById('view-customers');
@@ -676,7 +752,9 @@ function custForm(id){
       <div><fieldset><legend>ID photo</legend>
         ${c.idPhoto?`<img class="idphoto" src="${c.idPhoto}" alt="ID photo">`:'<p style="color:var(--mut);font-size:13px">No photo yet. Upload a driver’s license photo; then confirm each field against it.</p>'}
         <p><input type="file" id="cf_photo" accept="image/*"></p>
-        <p style="font-size:12px;color:var(--mut)">Photo is stored in this browser only. Fields marked “verify from photo” must be confirmed manually — nothing is auto-extracted.</p>
+        ${c.idPhoto?`<p><button type="button" class="btn sm" id="cf_ocr">📷 Auto-read from photo</button>
+        <span id="cf_ocr_status" style="font-size:12px;color:var(--mut)"></span></p>`:''}
+        <p style="font-size:12px;color:var(--mut)">Photo is stored in this browser only. Auto-read runs entirely on this device (the OCR engine downloads once — needs internet). Every auto-filled field must still be confirmed manually against the photo.</p>
       </fieldset></div>
     </div>
     <div style="display:flex;gap:8px"><button class="btn" id="cf_save">Save customer</button>
@@ -697,7 +775,8 @@ function custForm(id){
     };
     img.src = URL.createObjectURL(file);
   };
-  document.getElementById('cf_cancel').onclick = ()=>{host.innerHTML='';};
+  const ocrBtn = document.getElementById('cf_ocr');
+  if (ocrBtn) ocrBtn.onclick = ()=>runLicenseOCR(c);  document.getElementById('cf_cancel').onclick = ()=>{host.innerHTML='';};
   document.getElementById('cf_save').onclick = ()=>{
     for (const f of CUST_FIELDS) c[f.id]=document.getElementById('cf_'+f.id).value.trim();
     c.notes=document.getElementById('cf_notes').value.trim();
@@ -981,7 +1060,7 @@ function vAbout(){
     <h3>Calibration = template maintenance</h3>
     <p>Open Documents → <b>Nudge fields</b>, drag any overlay to its exact spot. Offsets are saved per template in this browser. To add or update a template: add the scan to <code>assets/</code>, add an entry to <code>TEMPLATES</code> in <code>app.js</code>, then nudge fields into place.</p>
     <h3>Security &amp; limits</h3>
-    <div class="notice"><b>Pilot-grade security.</b> All data (customers, deals, ID photos, signatures) is stored <b>unencrypted in this browser's localStorage</b>. Do not enter real customer PII until a backend with encryption and TLS is added. Demo passwords are hardcoded. No legal or regulatory compliance is claimed. Signature capture produces an image, not a certified e-signature. ID photos are <b>not</b> OCR-extracted — every field must be confirmed manually against the photo.</div>
+    <div class="notice"><b>Pilot-grade security.</b> All data (customers, deals, ID photos, signatures) is stored <b>unencrypted in this browser's localStorage</b>. Do not enter real customer PII until a backend with encryption and TLS is added. Demo passwords are hardcoded. No legal or regulatory compliance is claimed. Signature capture produces an image, not a certified e-signature. ID photos can be auto-read on this device (Tesseract.js OCR, photo never leaves the browser) to pre-fill name, DOB, address, and license number — every auto-filled field must still be confirmed manually against the photo.</div>
     <h3>Dealership settings</h3>
     <div class="row"><label class="f">Dealer name<input id="set_dealer" value="${esc(store.settings?.dealerName||'')}"></label>
     <label class="f">Dealer phone<input id="set_phone" value="${esc(store.settings?.dealerPhone||'')}"></label></div>
