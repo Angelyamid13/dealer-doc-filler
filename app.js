@@ -733,8 +733,8 @@ function vCustomers(){
   draw();
 }
 function dupName(c){
-  const n = c.name.trim().toLowerCase();
-  return n && store.customers.some(x=>x.id!==c.id && x.name.trim().toLowerCase()===n);
+  const n = (c.name||'').trim().toLowerCase();
+  return !!n && store.customers.some(x=>x.id!==c.id && (x.name||'').trim().toLowerCase()===n);
 }
 function custForm(id){
   const c = id ? store.customers.find(x=>x.id===id) : {id:uid('c'), verify:{}};
