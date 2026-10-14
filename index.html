@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DealerDoc Filler v2</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<!-- ============ LOGIN ============ -->
+<div id="loginView">
+  <div class="login-card">
+    <h1>DealerDoc Filler v2</h1>
+    <p>Dealership document automation — pilot build. Sign in with a demo account:</p>
+    <div class="creds">
+      <b>admin</b> / admin123 &nbsp;·&nbsp; full access<br>
+      <b>sales</b> / sales123 &nbsp;·&nbsp; customers, vehicles, deals<br>
+      <b>finance</b> / finance123 &nbsp;·&nbsp; deals &amp; documents
+    </div>
+    <label class="f">Username<input id="loginUser" autocomplete="username" value="admin"></label><br>
+    <label class="f">Password<input id="loginPass" type="password" autocomplete="current-password" value="admin123"></label>
+    <div class="login-err" id="loginErr"></div>
+    <button class="btn" id="loginBtn" style="width:100%">Sign in</button>
+    <div class="notice" style="margin:16px 0 0">
+      <b>Pilot build:</b> data lives unencrypted in this browser's localStorage.
+      Do not enter real customer PII until a backend with encryption/TLS is added.
+      No legal or regulatory compliance is claimed.
+    </div>
+  </div>
+</div>
+
+<!-- ============ APP ============ -->
+<div id="appView" style="display:none">
+<header class="app no-print">
+  <div><h1>DealerDoc Filler v2</h1><div class="sub">AI dealership document automation · pilot</div></div>
+  <div class="spacer"></div>
+  <span class="userbadge" id="userBadge"></span>
+  <button class="btn ghost sm" id="logoutBtn" style="background:transparent;color:#fff;border-color:#fff">Log out</button>
+</header>
+<nav class="tabs no-print" id="mainTabs"></nav>
+<main>
+  <section class="view" id="view-dashboard"></section>
+  <section class="view" id="view-customers"></section>
+  <section class="view" id="view-vehicles"></section>
+  <section class="view" id="view-deals"></section>
+  <section class="view" id="view-documents"></section>
+  <section class="view" id="view-audit"></section>
+  <section class="view" id="view-about"></section>
+</main>
+<footer class="app no-print">
+  <b>Pilot-grade security notice:</b> this app stores all data unencrypted in this browser's localStorage.
+  Do not enter real customer identification or PII. No legal/regulatory compliance is claimed.
+  Electronic signature capture is a signature <i>image</i>, not a certified e-signature.
+  Missing template: loan application page 1 was never provided — no loan-app template is built.
+</footer>
+</div>
+
+<!-- ============ SIGNATURE MODAL ============ -->
+<div class="modal" id="sigModal">
+  <div class="modal-card">
+    <h3 style="margin-top:0">Capture signature</h3>
+    <canvas id="sigCanvas" width="520" height="180"></canvas>
+    <div class="sig-note">Captured signature image — not a certified e-signature.</div>
+    <div style="display:flex;gap:8px">
+      <button class="btn ghost" id="sigClear">Clear</button>
+      <div class="spacer" style="flex:1"></div>
+      <button class="btn ghost" id="sigCancel">Cancel</button>
+      <button class="btn" id="sigSave">Save signature</button>
+    </div>
+  </div>
+</div>
+
+<script type="module" src="app.js"></script>
+</body>
+</html>
