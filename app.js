@@ -233,6 +233,45 @@ const TEMPLATES = [
     F('jPayableAmt',70,82.5,8,'a'), F('jPayableOn',82,82.5,6), F('jPayableYr',95,82.5,4),
     F('jMonthlyInst',76,85.0,8,'a',{calc:'finMonthly'}), F('jBeginOn',90,85.0,8),
   ]},
+{ id:'loan1', name:'Loan Application — page 1', img:'assets/loanapp_p1.jpg', orient:'portrait',
+  note:'Loan Application and Financial Disclosure, page 1 (applicant info).',
+  req:['purchaserName'],
+  fields:[
+    F('loanFirst',12,12.5,14,{auto:'firstName'}), F('loanMiddle',28,12.5,10),
+    F('loanLast',40,12.5,18,{auto:'lastName'}), F('loanSSN',66,12.5,14,{auto:'ssn'}),
+    F('loanDOB',84,12.5,12,{auto:'dob'}),
+    F('loanSpFirst',15,17.5,12), F('loanSpMiddle',29,17.5,10),
+    F('loanSpLast',43,17.5,18), F('loanSpSSN',66,17.5,14), F('loanSpDOB',84,17.5,12),
+    F('loanAddr1',2,30.0,96,{auto:'streetAddress'}), F('loanAddr2',2,35.0,96),
+    F('loanAddr3',2,40.0,96), F('loanAddr4',2,45.0,96),
+    F('loanPhone',5,46.5,20,{auto:'resPhone'}), F('loanCell',45,46.5,25),
+    F('loanDL',5,50.5,25,{auto:'dlNo'}), F('loanDLState',40,51.0,15,{auto:'state'}),
+    F('loanBank',5,54.5,30), F('loanAcct',45,54.5,20),
+    F('loanBankr',28,58.5,5), F('loanChapter',42,58.5,12),
+    F('loanBankrState',58,58.5,8), F('loanBankrYear',70,58.5,10),
+    F('loanCoPhone',5,64.5,20), F('loanCoCell',45,64.5,25),
+    F('loanCoDL',5,68.5,25), F('loanCoDLState',40,68.5,15),
+    F('loanCoBank',5,72.5,30), F('loanCoAcct',45,72.5,20),
+    F('loanCoBankr',28,76.5,5), F('loanCoChapter',42,76.5,12),
+    F('loanCoBankrState',58,76.5,8), F('loanCoBankrYear',70,76.5,10),
+    F('loanEmployer',5,83.5,18), F('loanEmpAddr',25,83.5,18),
+    F('loanEmpCity',45,83.5,10), F('loanEmpStateZip',57,83.5,10), F('loanEmpPhone',70,83.5,15),
+    F('loanEmpLength',5,87.5,15), F('loanEmpPosition',22,87.5,12),
+    F('loanEmpSuper',36,87.5,22), F('loanEmpIncome',62,87.5,18,'a'),
+    F('loanPrevEmp',5,91.5,90),
+  ]},
+{ id:'loan2', name:'Loan Application — page 2', img:'assets/loanapp_p2.jpg', orient:'portrait',
+  note:'Loan Application and Financial Disclosure, page 2 (references & signatures).',
+  req:[],
+  fields:[
+    F('loanSpEmployer',5,8.5,20), F('loanSpEmpAddr',28,8.5,20),
+    F('loanSpEmpCity',50,8.5,12), F('loanSpEmpStateZip',64,8.5,10), F('loanSpEmpPhone',76,8.5,18),
+    F('loanRef1',5,20.0,90), F('loanRef2',5,23.0,90),
+    F('loanRef3',5,26.0,90), F('loanRef4',5,29.0,90),
+    F('loanInitial',15,33.5,10),
+    F('sigLoanApp',5,47.5,40,'g',{sigKey:'sig_buyer'}),
+    F('sigLoanCoApp',55,47.5,40,'g',{sigKey:'sig_copurchaser'}),
+  ]},
 ];
 
 /* 24 jacket checklist labels (order matches jk0..jk23 overlay positions) */
@@ -310,6 +349,14 @@ function calcResolve(key, d, der){
     case 'fullAddr': {
       const parts=[d.streetAddress, [d.city,d.state,d.zip].filter(Boolean).join(', ')];
       return parts.filter(Boolean).join(' · ') || null;
+    }
+    case 'firstName': {
+      const n=String(d.purchaserName||'').trim().split(/\s+/);
+      return n[0]||null;
+    }
+    case 'lastName': {
+      const n=String(d.purchaserName||'').trim().split(/\s+/);
+      return n.length>1?n[n.length-1]:null;
     }
     case 'vehDesc': return [d.year,d.make,d.series].filter(Boolean).join(' ') || null;
     case 'tilDueDayText': return has(d.tilDueDay) ? `Monthly on the ${d.tilDueDay} day of the month` : null;
@@ -918,7 +965,7 @@ function vDeals(){
       const cid=document.getElementById('nd_c').value, vid=document.getElementById('nd_v').value;
       const c=store.customers.find(x=>x.id===cid), v=store.vehicles.find(x=>x.id===vid);
       const d={id:uid('d'), customerId:cid, vehicleId:vid, data:{}, signatures:{}, checklist:{}, createdAt:new Date().toISOString(), updatedAt:new Date().toISOString()};
-      const cmap={purchaserName:'name',streetAddress:'streetAddress',city:'city',county:'county',state:'state',zip:'zip',resPhone:'resPhone',busPhone:'busPhone',ssn:'ssn',dlNo:'dlNo'};
+      const cmap={purchaserName:'name',streetAddress:'streetAddress',city:'city',county:'county',state:'state',zip:'zip',resPhone:'resPhone',busPhone:'busPhone',ssn:'ssn',dlNo:'dlNo',dob:'dob'};
       for(const [dk,ck] of Object.entries(cmap)) if(c[ck]) d.data[dk]=c[ck];
       const vmap={year:'year',make:'make',series:'model',bodyType:'bodyType',cyl:'cyl',color:'color',vin:'vin',odometer:'mileage',stockNo:'stockNo',cond:'condition'};
       for(const [dk,vk] of Object.entries(vmap)) if(v[vk]) d.data[dk]=v[vk];
@@ -1142,7 +1189,7 @@ function seedDemo(){
     name: 'Miguel Hernández', dob: '03/22/1988',
     streetAddress: '4567 W 3500 S', city: 'West Valley City', county: 'Salt Lake',
     state: 'UT', zip: '84120', resPhone: '(801) 555-0134', busPhone: '(801) 555-0199',
-    email: 'miguel.h@example.com', dlNo: '123456789',
+    email: 'miguel.h@example.com', dlNo: '123456789', ssn: '987-65-4321',
     notes: 'EXAMPLE record — seeded by ?demo=1' };
   const veh = { id: uid('v'), vin: 'JF2GTACC3JH276452', year: '2018', make: 'Subaru',
     model: 'Crosstrek', trim: 'Premium', bodyType: 'SUV', engine: '2.0L H4', cyl: '4',
@@ -1152,7 +1199,7 @@ function seedDemo(){
   const data = {
     purchaserName: cust.name, streetAddress: cust.streetAddress, city: cust.city,
     county: cust.county, state: cust.state, zip: cust.zip,
-    resPhone: cust.resPhone, busPhone: cust.busPhone, dlNo: cust.dlNo,
+    resPhone: cust.resPhone, busPhone: cust.busPhone, dlNo: cust.dlNo, ssn: cust.ssn, dob: cust.dob,
     year: veh.year, make: veh.make, series: veh.model, bodyType: veh.bodyType,
     cyl: veh.cyl, color: veh.color, vin: veh.vin, odometer: veh.mileage,
     stockNo: veh.stockNo, cond: veh.condition,
