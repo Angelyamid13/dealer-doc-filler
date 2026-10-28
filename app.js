@@ -22,7 +22,7 @@ const TEMPLATES = [
   note:'Form 104-2 (IDS Rev. 06/19). Coordinates reused from calibrated v1.',
   req:['purchaserName','streetAddress','city','state','zip','year','make','vin','dateOfSale','line1'],
   fields:[
-    F('sellerDealer',2,3.7,34,'q'),
+    F('sellerDealer',2,3.7,34,'q',{auto:'dealerName'}),
     F('dateOfSale',82,4.4,16,'q'),
     F('purchaserName',62,7.5,36,'q'), F('streetAddress',62,10.0,36,'q'),
     F('city',62,13.0,12,'q'), F('county',76,13.0,9,'s'), F('state',86,13.0,5,'sq'), F('zip',93,13.0,5,'sq'),
@@ -80,7 +80,7 @@ const TEMPLATES = [
     F('line27',42,63.3,16,'a'), F('line28',42,64.6,16,'a'),
     F('line29',42,65.9,16,'a',{calc:'line29'}), F('line30',42,67.2,16,'a',{calc:'line30'}),
     F('line31',42,68.5,16,'a',{calc:'line31'}),
-    F('dealDay',4,69.8,8), F('dealMonth',14,69.8,10), F('dealYear',26,69.8,8),
+    F('dealDay',4,69.8,8,{auto:'dealDay'}), F('dealMonth',14,69.8,10,{auto:'dealMonth'}), F('dealYear',26,69.8,8,{auto:'dealYear'}),
     F('insuranceCo',38,71.8,30,'s'), F('policyNo',74,71.8,24,'s'),
     F('otherTermsNone',76.5,78.2,0,'c'), F('otherTermsFollows',88.5,78.2,0,'c'),
     F('sigCosPurchaser',2,92.3,36,'g',{sigKey:'sig_purchaser'}),
@@ -108,7 +108,7 @@ const TEMPLATES = [
     F('finMonthlyBox',78,29.5,18,'a',{calc:'finMonthly'}),
     F('payStartMonth',30,21.5,12), F('payStartDay',45,21.5,8), F('payStartYear',56,21.5,10),
     F('finTermMonths',26,22.8,10,{auto:'finMonths'}),
-    F('signDay',22,70.5,20), F('signMonthName',48,70.5,20), F('signYear2',74,70.5,6),
+    F('signDay',22,70.5,20,{auto:'signDay'}), F('signMonthName',48,70.5,20,{auto:'signMonthName'}), F('signYear2',74,70.5,6,{auto:'signYear2'}),
     F('sigFinLender',10,72.5,36,'g',{sigKey:'sig_lender'}),
     F('sigFinBuyer1',10,74.5,32,'g',{sigKey:'sig_buyer'}),
     F('sigFinBuyer2',47,74.5,38,'g',{sigKey:'sig_buyer'}),
@@ -216,7 +216,7 @@ const TEMPLATES = [
     F('jAmtOthers',93,28.0,6,'a',{auto:'line18'}),
     F('jTotalCash',93,31.0,6,'a',{calc:'line29'}),
     F('jAmtDOL',80,32.8,13,'a'),
-    F('jLicense',93,35.0,6,'a'), F('jCertTitle',93,37.5,6,'a'), F('jRegist',93,40.0,6,'a'),
+    F('jLicenseFee',93,35.0,6,'a'), F('jCertTitle',93,37.5,6,'a'), F('jRegist',93,40.0,6,'a'),
     F('jTotalOfficial',93,42.5,6,'a'), F('jInsCo',93,45.0,6,'a'), F('jSmog',93,47.5,6,'a'),
     F('jJacketTotal',93,50.0,6,'a'),
     F('jTradeIn',78,53.0,8,'a',{auto:'line10'}), F('jTradeIn2',88,53.0,5,'a',{auto:'line10'}),
@@ -295,16 +295,16 @@ const TEMPLATES = [
   req:[],
   fields:[
     F('bgAsIs',5,33.5,0,'c',{val:'ASIS'}), F('bgWarranty',5,35.5,0,'c',{val:'WARR'}),
-    F('bgDealerName',5,93.5,40), F('bgDealerAddr',5,96.5,60),
-    F('bgDealerPhone',5,99.5,25), F('bgDealerEmail',35,99.5,30),
+    F('bgDealerName',5,93.5,40,{auto:'dealerName'}), F('bgDealerAddr',5,96.5,60,{auto:'dealerAddress'}),
+    F('bgDealerPhone',5,99.5,25,{auto:'dealerPhone'}), F('bgDealerEmail',35,99.5,30,{auto:'dealerEmail'}),
   ]},
 { id:'buyers_back', name:'Buyers Guide — back', img:'assets/buyers_guide_back.jpg', orient:'portrait',
   note:'Buyers Guide back (defects list).',
   req:[],
   fields:[
-    F('bgBackDealer',5,83.5,40), F('bgBackDlrNo',45,83.5,20),
-    F('bgBackAddr',5,86.5,60), F('bgBackPhone',5,89.5,25), F('bgBackEmail',35,89.5,30),
-    F('bgBackContact',5,92.5,40),
+    F('bgBackDealer',5,83.5,40,{auto:'dealerName'}), F('bgBackDlrNo',45,83.5,20,{auto:'dealerNo'}),
+    F('bgBackAddr',5,86.5,60,{auto:'dealerAddress'}), F('bgBackPhone',5,89.5,25,{auto:'dealerPhone'}), F('bgBackEmail',35,89.5,30,{auto:'dealerEmail'}),
+    F('bgBackContact',5,92.5,40,{auto:'salesperson'}),
   ]},
 { id:'tc656_1', name:'Title Application (TC-656) p1', img:'assets/tc656_p1.jpg', orient:'portrait',
   note:'Utah TC-656 Vehicle Application for Title and Registration, page 1.',
@@ -401,9 +401,26 @@ const role = () => session?.role || null;
 const canDelete = () => role() === 'admin';
 
 /* ================= value resolution ================= */
+function datePartsOfSale(d){
+  const m = String(d.dateOfSale||'').match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if(!m) return null;
+  const months=['January','February','March','April','May','June','July','August','September','October','November','December'];
+  return { day:String(Number(m[3])), month:months[Number(m[2])-1]||'', year:m[1], year2:m[1].slice(2) };
+}
 function calcResolve(key, d, der){
   if (key in der.contract) return der.contract[key];
   switch(key){
+    case 'dealerName': return has(d.dealerName) ? d.dealerName : (store.settings?.dealerName || null);
+    case 'dealerPhone': return has(d.dealerPhone) ? d.dealerPhone : (store.settings?.dealerPhone || null);
+    case 'dealerAddress': return has(d.dealerAddress) ? d.dealerAddress : (store.settings?.dealerAddress || null);
+    case 'dealerEmail': return has(d.dealerEmail) ? d.dealerEmail : (store.settings?.dealerEmail || null);
+    case 'dealerNo': return has(d.dealerNo) ? d.dealerNo : (store.settings?.dealerNo || null);
+    case 'dealDay': { const p=datePartsOfSale(d); return p ? p.day : null; }
+    case 'dealMonth': { const p=datePartsOfSale(d); return p ? p.month : null; }
+    case 'dealYear': { const p=datePartsOfSale(d); return p ? p.year : null; }
+    case 'signDay': { const p=datePartsOfSale(d); return p ? p.day : null; }
+    case 'signMonthName': { const p=datePartsOfSale(d); return p ? p.month : null; }
+    case 'signYear2': { const p=datePartsOfSale(d); return p ? p.year2 : null; }
     case 'finPrincipal': return der.fin.principal;
     case 'finMonthly': return der.fin.monthly;
     case 'finCharge': return der.fin.financeCharge;
@@ -562,12 +579,64 @@ const FORM = [
    {id:'jPurchPhone',label:'telephone'},{id:'jCostEquity',label:'Cost or equity $',t:'num'},
    {id:'jPayoff',label:'Pay off $',t:'num'},{id:'jCommission',label:'Commission $',t:'num'},
    {id:'jRSNo',label:'R/S no.'},{id:'jAmtDOL',label:'Amount paid to DOL $',t:'num'},
-   {id:'jLicense',label:'License $',t:'num'},{id:'jCertTitle',label:'Cert. of title $',t:'num'},
+   {id:'jLicenseFee',label:'License $',t:'num'},{id:'jCertTitle',label:'Cert. of title $',t:'num'},
    {id:'jRegist',label:'Registration $',t:'num'},{id:'jTotalOfficial',label:'Total official fees $',t:'num'},
    {id:'jInsCo',label:'Amt paid to insurance co. $',t:'num'},{id:'jSmog',label:'Smog fee $',t:'num'},
    {id:'jJacketTotal',label:'TOTAL $',t:'num'},{id:'jRemCash',label:'Remaining cash $',t:'num'},
    {id:'jPayableAmt',label:'Payable $',t:'num'},{id:'jPayableOn',label:'on'},
    {id:'jPayableYr',label:'20'},{id:'jBeginOn',label:'Each beginning on'},
+ ]],
+ ['Contract of Sale — documents received', [
+   {id:'titleChk',label:'Certificate of title',t:'check'},{id:'docReg',label:'Registration',t:'check'},
+   {id:'docPOA',label:'Power of attorney',t:'check'},{id:'docOdo',label:'Odometer statement',t:'check'},
+   {id:'docAppr',label:'Appraisal',t:'check'},{id:'docPayoff',label:'Payoff authorization',t:'check'},
+   {id:'docOutCntry',label:'Out-of-country',t:'check'},{id:'ftcX',label:'FTC Buyers Guide provided',t:'check'},
+   {id:'otherTermsNone',label:'Other terms: none',t:'check'},{id:'otherTermsFollows',label:'Other terms: as follows',t:'check'},
+ ]],
+ ['Buyers Guide & finance co-buyer', [
+   {id:'bgAsIs',label:'Buyers Guide: as-is',t:'check'},{id:'bgWarranty',label:'Buyers Guide: warranty',t:'check'},
+   {id:'finSSN2',label:'Co-buyer SSN (finance agreement)'},{id:'finDL2',label:'Co-buyer DL # (finance agreement)'},
+ ]],
+ ['Loan application — applicant', [
+   {id:'loanMiddle',label:'Middle name'},{id:'loanCell',label:'Cell phone'},
+   {id:'loanAddr2',label:'Address line 2'},{id:'loanAddr3',label:'Address line 3'},
+   {id:'loanAddr4',label:'Address line 4'},{id:'loanBank',label:'Bank'},
+   {id:'loanAcct',label:'Bank account #'},{id:'loanBankr',label:'Bankruptcy?'},
+   {id:'loanChapter',label:'Bankruptcy chapter'},{id:'loanBankrState',label:'Bankruptcy state'},
+   {id:'loanBankrYear',label:'Bankruptcy year'},{id:'loanEmployer',label:'Employer'},
+   {id:'loanEmpAddr',label:'Employer address'},{id:'loanEmpCity',label:'Employer city'},
+   {id:'loanEmpStateZip',label:'Employer state / ZIP'},{id:'loanEmpPhone',label:'Employer phone'},
+   {id:'loanEmpLength',label:'Time at employer'},{id:'loanEmpPosition',label:'Position'},
+   {id:'loanEmpSuper',label:'Supervisor'},{id:'loanEmpIncome',label:'Income $',t:'num'},
+   {id:'loanPrevEmp',label:'Previous employer'},
+ ]],
+ ['Loan application — spouse / co-applicant', [
+   {id:'loanSpFirst',label:'Spouse first name'},{id:'loanSpMiddle',label:'Spouse middle name'},
+   {id:'loanSpLast',label:'Spouse last name'},{id:'loanSpSSN',label:'Spouse SSN'},
+   {id:'loanSpDOB',label:'Spouse date of birth'},{id:'loanSpEmployer',label:'Spouse employer'},
+   {id:'loanSpEmpAddr',label:'Spouse employer address'},{id:'loanSpEmpCity',label:'Spouse employer city'},
+   {id:'loanSpEmpStateZip',label:'Spouse employer state / ZIP'},{id:'loanSpEmpPhone',label:'Spouse employer phone'},
+   {id:'loanCoPhone',label:'Co-applicant phone'},{id:'loanCoCell',label:'Co-applicant cell'},
+   {id:'loanCoDL',label:'Co-applicant DL #'},{id:'loanCoDLState',label:'Co-applicant DL state'},
+   {id:'loanCoBank',label:'Co-applicant bank'},{id:'loanCoAcct',label:'Co-applicant account #'},
+   {id:'loanCoBankr',label:'Co-applicant bankruptcy?'},{id:'loanCoChapter',label:'Co-applicant bankruptcy chapter'},
+   {id:'loanCoBankrState',label:'Co-applicant bankruptcy state'},{id:'loanCoBankrYear',label:'Co-applicant bankruptcy year'},
+ ]],
+ ['Loan application — references', [
+   {id:'loanRef1',label:'Reference 1'},{id:'loanRef2',label:'Reference 2'},
+   {id:'loanRef3',label:'Reference 3'},{id:'loanRef4',label:'Reference 4'},
+   {id:'loanInitial',label:'Applicant initials (loan app p.2)'},
+ ]],
+ ['Transaction Disclosure (TC-466)', [
+   {id:'tcDealerNo',label:'Dealer no.'},{id:'tcCoBuyer',label:'Co-buyer name'},
+   {id:'tcLine3',label:'Line 3 $',t:'num'},{id:'tcLine4',label:'Line 4 $',t:'num'},
+   {id:'tcLine5',label:'Line 5 $',t:'num'},{id:'tcLine6',label:'Line 6 $',t:'num'},
+   {id:'tcLine7',label:'Line 7 $',t:'num'},{id:'tcLine8',label:'Line 8 $',t:'num'},
+   {id:'tcInitials',label:'Buyer initials (TC-466)'},
+ ]],
+ ['DMV / title extras', [
+   {id:'tc656OwnerEmail',label:'Owner email (title application)'},{id:'trBuyer1',label:'Title reassignment — buyer (1st)'},
+   {id:'trBuyer2',label:'Title reassignment — buyer (2nd)'},
  ]],
 ];
 const CUST_FIELDS = [
@@ -1087,6 +1156,7 @@ function fieldInput(d, f){
   let ph='', ro=false, cls='';
   if(f.calc){ ro=true; cls='calc'; const rv=calcResolve(f.calc,d.data,der); return `<input id="df_${f.id}" class="${cls}" readonly tabindex="-1" value="${rv==null?'':(typeof rv==='number'?money(rv):esc(rv))}">`; }
   if(f.auto){ const av=calcResolve(f.auto,d.data,der); if(av!=null&&av!=='') ph='auto: '+(typeof av==='number'?money(av):av); }
+  if(f.t==='check') return `<input type="checkbox" id="df_${f.id}" ${val?'checked':''} style="width:auto">`;
   if(f.t==='sel') return `<select id="df_${f.id}">${f.opts.map(o=>`<option ${val===o?'selected':''}>${o}</option>`).join('')}</select>`;
   if(f.t==='radio') return `<span class="radio-row" style="display:flex;gap:14px">${f.opts.map(o=>`<label style="display:flex;gap:4px;align-items:center;font-size:13px"><input type="radio" name="df_${f.id}" value="${o}" ${val===o?'checked':''} style="width:auto"> ${o}</label>`).join('')}</span>`;
   if(f.t==='date') return `<input id="df_${f.id}" type="date" value="${esc(val)}" placeholder="${esc(ph)}">`;
@@ -1119,6 +1189,9 @@ function renderDealForm(d, body){
       body.querySelectorAll(`input[name="df_${f.id}"]`).forEach(r=>r.addEventListener('change',()=>{
         d.data[f.id]=r.value; audit('edit deal', dealName(d)+' · '+f.id+'='+r.value); refresh();
       }));
+    } else if(f.t==='check'){
+      const inp=document.getElementById('df_'+f.id);
+      if(inp) inp.addEventListener('change',()=>{ d.data[f.id]=inp.checked?'1':''; refresh(); });
     } else {
       const inp=document.getElementById('df_'+f.id);
       if(inp) inp.addEventListener('input',()=>{ d.data[f.id]=inp.value; refresh(); });
@@ -1185,7 +1258,7 @@ function vDocuments(){
       <label class="f" style="min-width:220px">Deal<select id="docDeal">${store.deals.map(x=>`<option value="${x.id}" ${x.id===docDealId?'selected':''}>${esc(dealName(x))}</option>`).join('')}</select></label>
       <label class="f" style="min-width:260px">Template<select id="docTpl">${TEMPLATES.map(t=>`<option value="${t.id}" ${t.id===tpl.id?'selected':''}>${esc(t.name)}</option>`).join('')}</select></label>
       <button class="btn sm" id="docPrintOne">🖨 Print this page / PDF</button>
-      <button class="btn sm ghost" id="docPrintAll">🖨 Print full package (8 pages)</button>
+      <button class="btn sm ghost" id="docPrintAll">🖨 Print full package (${TEMPLATES.length} pages)</button>
       <button class="btn sm ghost" id="docCalib">${docCalib?'✓ Nudge mode ON':'Nudge fields'}</button>
       ${docCalib?'<button class="btn sm warn" id="docCalibReset">Reset calibration</button>':''}
     </div>
@@ -1209,7 +1282,7 @@ function vDocuments(){
 }
 function doPrint(mode, tpl, deal){
   document.body.dataset.print = mode;
-  audit('print', `${mode==='all'?'full package (8 pages)':tpl.name} — ${dealName(deal)}`);
+  audit('print', `${mode==='all'?('full package ('+TEMPLATES.length+' pages)'):tpl.name} — ${dealName(deal)}`);
   setTimeout(()=>window.print(), 60);
 }
 window.addEventListener('afterprint', ()=>{ delete document.body.dataset.print; });
@@ -1229,7 +1302,7 @@ function vAbout(){
     <p><b>DealerDoc Filler v2</b> — pilot dealership document automation. Original scans are never modified; the app overlays typed values on the untouched images.</p>
     <h3>Templates (${TEMPLATES.length} pages)</h3>
     <ul>${TEMPLATES.map(t=>`<li><b>${esc(t.name)}</b> — ${esc(t.note)}</li>`).join('')}</ul>
-    <p><b>Missing template:</b> loan application page 1 was never provided (contract-pg-1.png is only the tail of the loan app), so no loan-application template is built.</p>
+    <p><b>Loan application:</b> pages 1 and 2 are included as templates.</p>
     <h3>Calculations</h3>
     <ul><li>Contract of Sale 31-line chain incl. Utah sales/use tax (rate is an input).</li>
     <li>Finance agreement &amp; Truth in Lending: monthly payment via standard amortization; finance charge and total of payments derived.</li>
@@ -1241,11 +1314,14 @@ function vAbout(){
     <h3>Dealership settings</h3>
     <div class="row"><label class="f">Dealer name<input id="set_dealer" value="${esc(store.settings?.dealerName||'')}"></label>
     <label class="f">Dealer phone<input id="set_phone" value="${esc(store.settings?.dealerPhone||'')}"></label></div>
+    <div class="row"><label class="f">Dealer address<input id="set_addr" value="${esc(store.settings?.dealerAddress||'')}"></label>
+    <label class="f">Dealer email<input id="set_email" value="${esc(store.settings?.dealerEmail||'')}"></label>
+    <label class="f">Dealer no.<input id="set_no" value="${esc(store.settings?.dealerNo||'')}"></label></div>
     <button class="btn sm" id="set_save">Save settings</button>
     <h3>Demo accounts</h3><p><b>admin</b>/admin123 (full access incl. delete + audit) · <b>sales</b>/sales123 · <b>finance</b>/finance123</p>
   </div>`;
   document.getElementById('set_save').onclick=()=>{
-    store.settings={dealerName:document.getElementById('set_dealer').value.trim(),dealerPhone:document.getElementById('set_phone').value.trim()};
+    store.settings={...store.settings,dealerName:document.getElementById('set_dealer').value.trim(),dealerPhone:document.getElementById('set_phone').value.trim(),dealerAddress:document.getElementById('set_addr').value.trim(),dealerEmail:document.getElementById('set_email').value.trim(),dealerNo:document.getElementById('set_no').value.trim()};
     save(); audit('settings','dealer settings updated'); alert('Saved.');
   };
 }
