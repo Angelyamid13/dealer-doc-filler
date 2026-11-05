@@ -1,7 +1,7 @@
 /* DealerDoc Filler v2 — application logic (ES module). */
 import { num, has, money, round2, computeContract, isCalcId,
-         monthlyPayment, loanTotals, isValidVIN, dealDerived } from './calc.js';
-import { parseLicenseText } from './ocr.js';
+         monthlyPayment, loanTotals, isValidVIN, vinCheckDigitOK, dealDerived } from './calc.js';
+import { parseLicenseText, parseVinText, reconcileFields, fieldConfidence } from './ocr.js';
 
 /* ================= constants ================= */
 const USERS = {
@@ -88,8 +88,7 @@ const TEMPLATES = [
     F('sigCosCoPurchaser',2,94.7,36,'g',{sigKey:'sig_copurchaser'}),
     F('sigDate2',40,94.1,12,{auto:'sigDate'}),
     F('sigCosSeller',61,94.7,26,'g',{sigKey:'sig_seller'}),
-    F('sigDate3',86,94.1,11,{auto:'sigDate'}),
-  ,F('sigDisclosureA',53,32.6,28,'g',{sigKey:'sig_purchaser'}),F('intRateFrom',59.5,40.8,6.5,'s'),F('intRateTo',72.5,40.8,6,'s'),F('termFrom',47,42.4,10,'s'),F('termTo',73,42.4,10,'s'),F('payFrom',50,44.0,10.5,'s'),F('payTo',76,44.0,11,'s'),F('finDown',57,45.2,12,'s',{auto:'line14'}),F('titledTo',68,91.9,29,'s',{auto:'purchaserName'})]},
+    F('sigDate3',86,94.1,11,{auto:'sigDate'}),F('sigDisclosureA',53,32.6,28,'g',{sigKey:'sig_purchaser'}),F('intRateFrom',59.5,40.8,6.5,'s'),F('intRateTo',72.5,40.8,6,'s'),F('termFrom',47,42.4,10,'s'),F('termTo',73,42.4,10,'s'),F('payFrom',50,44.0,10.5,'s'),F('payTo',76,44.0,11,'s'),F('finDown',57,45.2,12,'s',{auto:'line14'}),F('titledTo',68,91.9,29,'s',{auto:'purchaserName'})]},
 { id:'fin', name:'Finance Agreement', img:'assets/fin-agreement.jpg', orient:'portrait',
   note:'Investment Strategies finance agreement. Monthly payment via standard amortization.',
   req:['finRate','finMonths'],
@@ -158,21 +157,21 @@ const TEMPLATES = [
   note:'Utah TC-891 Rev. 6/26. Transferor = dealer/seller; transferee = purchaser.',
   req:['odoReading','odoTransferor','odoTransferee'],
   fields:[
-    F('odoTransferor',5,15.2,90,'q',{auto:'dealerName'}),
-    F('odoTAddr',5,18.2,52), F('odoTCity',58,18.2,18), F('odoTState',77,18.2,6), F('odoTZip',84,18.2,12),
-    F('odoYear',5,25.8,20,{auto:'year'}), F('odoMake',26,25.8,28,{auto:'make'}),
-    F('odoModel',62,25.8,33,{auto:'series'}),
-    F('odoVin',5,28.6,60,'s',{auto:'vin'}), F('odoBody',66,28.6,29,{auto:'bodyType'}),
-    F('odoReading',24.5,40.3,11,'q',{auto:'odometer'}),
+    F('odoTransferor',5,14.6,90,'q',{auto:'dealerName'}),
+    F('odoTAddr',5,17.9,52), F('odoTCity',58,17.9,18), F('odoTState',77,17.9,6), F('odoTZip',84,17.9,12),
+    F('odoYear',5,25.9,20,{auto:'year'}), F('odoMake',26,25.9,28,{auto:'make'}),
+    F('odoModel',62,25.9,33,{auto:'series'}),
+    F('odoVin',5,29.1,60,'s',{auto:'vin'}), F('odoBody',66,29.1,29,{auto:'bodyType'}),
+    F('odoReading',24.5,40.5,11,'q',{auto:'odometer'}),
     F('odoUnit',39,42.3,0,'r',{val:'miles'}), F('odoUnit',48,42.3,0,'r',{val:'km'}),
-    F('odoCert',9.2,46.9,0,'r',{val:'actual'}), F('odoCert',9.2,49.2,0,'r',{val:'excess'}), F('odoCert',9.2,51.6,0,'r',{val:'notactual'}),
-    F('sigOdoTransferor',5,52.6,70,'g',{sigKey:'sig_seller'}),
-    F('odoDate1',80,53.4,15,{auto:'dateOfSale'}),
-    F('odoTransferee',5,62.0,90,'q',{auto:'purchaserName'}),
-    F('odoTeAddr',5,64.8,52,{auto:'streetAddress'}), F('odoTeCity',58,64.8,18,{auto:'city'}),
-    F('odoTeState',77,64.8,6,{auto:'state'}), F('odoTeZip',84,64.8,12,{auto:'zip'}),
-    F('sigOdoTransferee',5,67.9,70,'g',{sigKey:'sig_buyer'}),
-    F('odoDate2',80,68.0,15,{auto:'dateOfSale'}),
+    F('odoCert',9.2,46.7,0,'r',{val:'actual'}), F('odoCert',9.2,49,0,'r',{val:'excess'}), F('odoCert',9.2,51.4,0,'r',{val:'notactual'}),
+    F('sigOdoTransferor',5,50.7,70,'g',{sigKey:'sig_seller'}),
+    F('odoDate1',80,51.4,15,{auto:'dateOfSale'}),
+    F('odoTransferee',5,59.4,90,'q',{auto:'purchaserName'}),
+    F('odoTeAddr',5,62.7,52,{auto:'streetAddress'}), F('odoTeCity',58,62.7,18,{auto:'city'}),
+    F('odoTeState',77,62.7,6,{auto:'state'}), F('odoTeZip',84,62.7,12,{auto:'zip'}),
+    F('sigOdoTransferee',5,68.6,70,'g',{sigKey:'sig_buyer'}),
+    F('odoDate2',80,69.3,15,{auto:'dateOfSale'}),
   ]},
 { id:'jacket', name:'Deal Jacket', img:'assets/jacket.jpg', orient:'landscape',
   note:'IDS deal jacket (landscape). Key deal fields + 24-item document checklist.',
@@ -258,8 +257,7 @@ const TEMPLATES = [
     F('loanEmpCity',45,83.5,10), F('loanEmpStateZip',57,83.5,10), F('loanEmpPhone',70,83.5,15),
     F('loanEmpLength',5,87.5,15), F('loanEmpPosition',22,87.5,12),
     F('loanEmpSuper',36,87.5,22), F('loanEmpIncome',62,87.5,18,'a'),
-    F('loanPrevEmp',5,91.5,90),
-  ,F('loanCity',34,27.2,13,'s',{auto:'city'}),F('loanState',49,27.2,8,'s',{auto:'state'}),F('loanZip',59,27.2,8,'s',{auto:'zip'}),F('loanLandlord',69,27.2,28)]},
+    F('loanPrevEmp',5,91.5,90),F('loanCity',34,27.2,13,'s',{auto:'city'}),F('loanState',49,27.2,8,'s',{auto:'state'}),F('loanZip',59,27.2,8,'s',{auto:'zip'}),F('loanLandlord',69,27.2,28)]},
 { id:'loan2', name:'Loan Application — page 2', img:'assets/loanapp_p2.jpg', orient:'portrait',
   note:'Loan Application and Financial Disclosure, page 2 (references & signatures).',
   req:[],
@@ -276,65 +274,62 @@ const TEMPLATES = [
   note:'Utah TC-466 Transaction Disclosure Form.',
   req:['purchaserName'],
   fields:[
-    F('tcTransDate',57,16.0,18,{auto:'dateOfSale'}), F('tcDealerNo',81,16.0,14),
-    F('tcBuyerName',5,18.4,45,{auto:'purchaserName'}), F('tcCoBuyer',55,18.4,40),
-    F('tcVin',5,21.2,35,{auto:'vin'}), F('tcMake',43,21.2,15,{auto:'make'}),
-    F('tcModel',60,21.2,15,{auto:'series'}), F('tcYear',82,21.2,10,{auto:'year'}),
-    F('tcLine1',86,24.2,10,'a',{calc:'line1'}), F('tcLine2',86,26.3,10,'a',{calc:'line17'}),
-    F('tcLine3',86,28.3,10,'a'), F('tcLine4',86,38.8,10,'a'), F('tcLine5',86,40.8,10,'a'),
-    F('tcLine6',86,51.2,10,'a'), F('tcLine7',86,53.3,10,'a'), F('tcLine8',86,65.8,10,'a'),
-    F('tcLine9',86,67.8,10,'a',{calc:'finTotal'}),
-    F('tcMonthly1',58,75.9,14,'a',{calc:'finMonthly'}), F('tcMonthly2',58,77.9,14,'a',{calc:'finMonthly'}),
-    F('tcInitials',87,74.5,9),
-    F('sigTcDealer',34,87.4,28,'g',{sigKey:'sig_seller'}), F('tcDealerDate',81,86.8,14,{auto:'dateOfSale'}),
-    F('sigTcBuyer',3,90.4,28,'g',{sigKey:'sig_buyer'}), F('sigTcCoBuyer',34,90.4,28,'g',{sigKey:'sig_copurchaser'}),
-    F('tcBuyerDate',81,89.8,14,{auto:'dateOfSale'}),
+    F('tcTransDate',43.5,15.5,12,{auto:'dateOfSale'}), F('tcDealerNo',57.5,15.5,14),
+    F('tcBuyerName',5,18.4,37,{auto:'purchaserName'}), F('tcCoBuyer',43.5,18.4,40),
+    F('tcVin',5,21.3,35,{auto:'vin'}), F('tcMake',43,21.3,15,{auto:'make'}),
+    F('tcModel',60,21.3,15,{auto:'series'}), F('tcYear',82,21.3,10,{auto:'year'}),
+    F('tcLine1',86,24.6,10,'a',{calc:'line1'}), F('tcLine2',86,26.2,10,'a',{calc:'line17'}),
+    F('tcLine3',86,27.9,10,'a'), F('tcLine4',86,38.4,10,'a'), F('tcLine5',86,40.8,10,'a'),
+    F('tcLine6',86,50.8,10,'a'), F('tcLine7',86,52.4,10,'a'), F('tcLine8',86,65.2,10,'a'),
+    F('tcLine9',86,67.4,10,'a',{calc:'finTotal'}),
+    F('tcMonthly1',58,75.4,14,'a',{calc:'finMonthly'}), F('tcMonthly2',58,77.7,14,'a',{calc:'finMonthly'}),
+    F('tcInitials',87,77.8,9),
+    F('sigTcDealer',34,87.1,28,'g',{sigKey:'sig_seller'}), F('tcDealerDate',81,87.8,14,{auto:'dateOfSale'}),
+    F('sigTcBuyer',3,90,28,'g',{sigKey:'sig_buyer'}), F('sigTcCoBuyer',34,90,28,'g',{sigKey:'sig_copurchaser'}),
+    F('tcBuyerDate',81,90.7,14,{auto:'dateOfSale'}),
   ]},
 { id:'buyers_front', name:'Buyers Guide', img:'assets/buyers_guide_front.jpg', orient:'portrait',
   note:'FTC Buyers Guide (front).',
   req:[],
   fields:[
-    F('bgAsIs',11.2,24.2,0,'c',{val:'ASIS'}), F('bgWarranty',11.2,37.5,0,'c',{val:'WARR'}),
-  ,F('bgVehMake',11,17.7,20,'s',{auto:'make'}),F('bgVehModel',32,17.7,16,'s',{auto:'series'}),F('bgVehYear',49,17.7,15,'s',{auto:'year'}),F('bgVehVin',66,17.7,23,'s',{auto:'vin'})]},
+    F('bgAsIs',11.2,24.2,0,'c',{val:'ASIS'}), F('bgWarranty',11,31.5,0,'c',{val:'WARR'}),F('bgVehMake',10.8,15.1,18,'s',{auto:'make'}),F('bgVehModel',28.5,15.1,13,'s',{auto:'series'}),F('bgVehYear',42.5,15.1,12,'s',{auto:'year'}),F('bgVehVin',63.5,15.1,27,'s',{auto:'vin'})]},
 { id:'buyers_back', name:'Buyers Guide — back', img:'assets/buyers_guide_back.jpg', orient:'portrait',
   note:'Buyers Guide back (defects list).',
   req:[],
   fields:[
-    F('bgBackDealer',12,71.7,25,{auto:'dealerName'}), F('bgBackDlrNo',37.5,71.7,12,{auto:'dealerNo'}),
-    F('bgBackAddr',12,75.2,50,{auto:'dealerAddress'}), F('bgBackPhone',12,78.7,20,{auto:'dealerPhone'}), F('bgBackEmail',57,78.7,30,{auto:'dealerEmail'}),
-    F('bgBackContact',12,82.2,30,{auto:'salesperson'}),
+    F('bgBackDealer',12,74,48,{auto:'dealerName'}), F('bgBackDlrNo',62,74,12,{auto:'dealerNo'}),
+    F('bgBackAddr',12,77.1,78,{auto:'dealerAddress'}), F('bgBackPhone',12,80.3,30,{auto:'dealerPhone'}), F('bgBackEmail',51,80.3,38,{auto:'dealerEmail'}),
+    F('bgBackContact',12,83.4,60,{auto:'salesperson'}),
   ]},
 { id:'tc656_1', name:'Title Application (TC-656) p1', img:'assets/tc656_p1.jpg', orient:'portrait',
   note:'Utah TC-656 Vehicle Application for Title and Registration, page 1.',
   req:['purchaserName'],
   fields:[
-    F('tc656OwnerName',5,23.5,45,{auto:'purchaserName'}), F('tc656OwnerEmail',55,23.5,40),
-    F('tc656OwnerID',5,26.5,25,{auto:'dlNo'}), F('tc656OwnerIDState',32,26.5,12,{auto:'state'}),
-    F('tc656OwnerAddr',5,28.6,40,{auto:'streetAddress'}), F('tc656OwnerCity',47,28.6,20,{auto:'city'}),
-    F('tc656OwnerState',70,28.6,8,{auto:'state'}), F('tc656OwnerZip',80,28.6,12,{auto:'zip'}),
-    F('tc656Year',5,85.8,7,{auto:'year'}), F('tc656Make',12.5,85.8,16,{auto:'make'}),
-    F('tc656Model',31,85.8,14,{auto:'series'}), F('tc656Color',46,85.8,12.5,{auto:'color'}),
-    F('tc656Vin',59,85.8,36,{auto:'vin'}),
-    F('tc656Cyl',5,88.3,7,{auto:'cyl'}), F('tc656Body',31,88.3,16,{auto:'bodyType'}),
-    F('tc656Price',79,90.8,17,'a',{calc:'line1'}),
+    F('tc656OwnerName',5,23.4,45,{auto:'purchaserName'}), F('tc656OwnerEmail',55,23.4,40),
+    F('tc656OwnerID',5,26.3,25,{auto:'dlNo'}), F('tc656OwnerIDState',32,26.3,12,{auto:'state'}),
+    F('tc656OwnerAddr',5,29.2,40,{auto:'streetAddress'}), F('tc656OwnerCity',47,29.2,20,{auto:'city'}),
+    F('tc656OwnerState',70,29.2,8,{auto:'state'}), F('tc656OwnerZip',80,29.2,12,{auto:'zip'}),
+    F('tc656Year',5,84.9,7,{auto:'year'}), F('tc656Make',12.5,84.9,16,{auto:'make'}),
+    F('tc656Model',31,84.9,14,{auto:'series'}), F('tc656Color',46,84.9,12.5,{auto:'color'}),
+    F('tc656Vin',59,84.9,36,{auto:'vin'}),
+    F('tc656Cyl',5,87.8,7,{auto:'cyl'}), F('tc656Body',31,87.8,16,{auto:'bodyType'}),
+    F('tc656Price',79,90.7,17,'a',{calc:'line1'}),
   ]},
 { id:'tc656_2', name:'Title Application (TC-656) p2', img:'assets/tc656_p2.jpg', orient:'portrait',
   note:'Utah TC-656 page 2.',
   req:[],
   fields:[
-    F('tc656Sig1',5,70.2,40,'g',{sigKey:'sig_buyer'}), F('tc656Date1',79,70.3,14,{auto:'dateOfSale'}),
-    F('tc656Sig2',5,73.2,40,'g',{sigKey:'sig_copurchaser'}), F('tc656Date2',79,73.3,14,{auto:'dateOfSale'}),
-  ,F('tc656PurchDate',5,87.3,20,'s',{auto:'dateOfSale'}),F('tc656DealerNo',30,87.3,14,'s',{auto:'dealerNo'}),F('cond',38.3,87.2,0,'r',{val:'NEW'}),F('cond',44.3,87.2,0,'r',{val:'USED'}),F('sigTc656Dealer',38,88.9,32,'g',{sigKey:'sig_seller'}),F('tc656DealerDate',79,89.0,14,'s',{auto:'dateOfSale'})]},
-{ id:'tc614', name:'Salvage Title Notice (TC-614)', img:'assets/tc614.jpg', orient:'portrait',
+    F('tc656Sig1',5,69.5,40,'g',{sigKey:'sig_buyer'}), F('tc656Date1',79,70.2,14,{auto:'dateOfSale'}),
+    F('tc656Sig2',5,72.4,40,'g',{sigKey:'sig_copurchaser'}), F('tc656Date2',79,73.1,14,{auto:'dateOfSale'}),F('tc656PurchDate',5,87.1,20,'s',{auto:'dateOfSale'}),F('tc656DealerNo',30,87.1,14,'s',{auto:'dealerNo'}),F('cond',38.3,87.2,0,'r',{val:'NEW'}),F('cond',44.3,87.2,0,'r',{val:'USED'}),F('sigTc656Dealer',38,89.3,32,'g',{sigKey:'sig_seller'}),F('tc656DealerDate',79,90,14,'s',{auto:'dateOfSale'})]},
+{ id:'tc614', name:'Salvage Title Notice (TC-814)', img:'assets/tc614.jpg', orient:'portrait',
   note:'Utah TC-614 Notice of Salvage or Branded Title.',
   req:[],
   fields:[
-    F('tc614Vin',50,17.9,45,{auto:'vin'}), F('tc614Year',5,15.4,13,{auto:'year'}),
-    F('tc614Make',22,15.4,20,{auto:'make'}), F('tc614Model',50,15.4,20,{auto:'series'}),
-    F('tc614Buyer',48,40.0,22,{auto:'purchaserName'}), F('tc614Date',74,40.0,20,{auto:'dateOfSale'}),
-    F('sigTc614Buyer',5,39.3,38,'g',{sigKey:'sig_buyer'}),
-    F('sigTc614Seller',5,42.2,38,'g',{sigKey:'sig_seller'}),
-  ,F('tc614Body',76,15.4,18,'s',{auto:'bodyType'}),F('tc614Color',5,17.9,30,'s',{auto:'color'})]},
+    F('tc614Vin',50,18,45,{auto:'vin'}), F('tc614Year',5,14.7,13,{auto:'year'}),
+    F('tc614Make',22,14.7,20,{auto:'make'}), F('tc614Model',50,15,20,{auto:'series'}),
+    F('tc614Buyer',48,40.5,22,{auto:'purchaserName'}), F('tc614Date',74,40.5,20,{auto:'dateOfSale'}),
+    F('sigTc614Buyer',5,39.8,38,'g',{sigKey:'sig_buyer'}),
+    F('sigTc614Seller',5,43.2,38,'g',{sigKey:'sig_seller'}),F('tc614Body',76,14.7,18,'s',{auto:'bodyType'}),F('tc614Color',5,18,30,'s',{auto:'color'})]},
 { id:'recall', name:'Recall Disclosure', img:'assets/recall_disclosure.jpg', orient:'portrait',
   note:'Used Motor Vehicle Safety Recall Disclosure Statement.',
   req:[],
@@ -343,8 +338,7 @@ const TEMPLATES = [
     F('rcMake',38,19.4,17,{auto:'make'}), F('rcModel',68,19.4,28,{auto:'series'}),
     F('rcBuyer',43,79.4,18,{auto:'purchaserName'}), F('rcDate',71,79.4,20,{auto:'dateOfSale'}),
     F('sigRecallBuyer',21,79.4,38,'g',{sigKey:'sig_buyer'}),
-    F('sigRecallDealer',38,84.9,32,'g',{sigKey:'sig_seller'}),
-  ,F('rcDealerDate',71,84.9,20,'s',{auto:'dateOfSale'})]},
+    F('sigRecallDealer',38,84.9,32,'g',{sigKey:'sig_seller'}),F('rcDealerDate',71,84.9,20,'s',{auto:'dateOfSale'})]},
 { id:'title_reassign', name:'Title Reassignment', img:'assets/title_reassign.jpg', orient:'portrait',
   note:'Reassignment of Title — Owner Transfer and Odometer Disclosure.',
   req:[],
@@ -872,13 +866,13 @@ function loadTesseract(){
 /* Upscale + grayscale + autocontrast the photo before OCR.
  * Tesseract reads small/low-contrast phone photos much better this way.
  * Falls back to the original image if anything goes wrong. */
-function preprocessForOCR(dataUrl){
+function preprocessForOCR(dataUrl, mode){
   return new Promise((resolve)=>{
     try{
       const img = new Image();
       img.onload = ()=>{
         try{
-          const scale = Math.min(2.5, 1800/Math.max(img.width, img.height));
+          const scale = Math.min(2.5, (mode==='otsu'?2400:1800)/Math.max(img.width, img.height));
           const w = Math.max(1, Math.round(img.width*scale));
           const h = Math.max(1, Math.round(img.height*scale));
           const cv = document.createElement('canvas'); cv.width = w; cv.height = h;
@@ -895,6 +889,22 @@ function preprocessForOCR(dataUrl){
           for (let i=0;i<w*h;i++){
             const v = Math.round((lum[i]-mn)/range*255);
             d[i*4] = d[i*4+1] = d[i*4+2] = v; d[i*4+3] = 255;
+          }
+          if (mode === 'otsu'){
+            // Otsu binarization: a hard black/white image is a second,
+            // independent "opinion" for the dual-pass OCR reconcile.
+            const hist = new Array(256).fill(0);
+            for (let i=0;i<w*h;i++) hist[d[i*4]]++;
+            let sum = 0; for (let i=0;i<256;i++) sum += i*hist[i];
+            let sumB = 0, wB = 0, best = -1, thr = 127;
+            for (let i=0;i<256;i++){
+              sumB += i*hist[i]; wB += hist[i];
+              if (!wB) continue;
+              const wF = w*h - wB; if (!wF) break;
+              const varBetween = Math.pow(sumB/wB - (sum-sumB)/wF, 2) * wB * wF;
+              if (varBetween > best){ best = varBetween; thr = i; }
+            }
+            for (let i=0;i<w*h;i++){ const v = d[i*4] > thr ? 255 : 0; d[i*4] = d[i*4+1] = d[i*4+2] = v; }
           }
           ctx.putImageData(idata, 0, 0);
           resolve(cv.toDataURL('image/jpeg', 0.92));
@@ -919,17 +929,31 @@ async function runLicenseOCR(c){
       logger: m => { if (m.status === 'recognizing text' && m.progress != null)
         setStatus('Reading photo… ' + Math.round(m.progress * 100) + '%'); }
     });
-    let text = '';
+    // Dual pass: two preprocessing variants are read and reconciled.
+    // Agreements are trusted; disagreements go to the read whose words
+    // Tesseract scored higher and are flagged for a careful manual check.
+    const passes = [];
     try{
-      const ocrImg = await preprocessForOCR(c.idPhoto);
-      const r = await worker.recognize(ocrImg);
-      text = (r && r.data && r.data.text) || '';
+      for (const mode of ['contrast','otsu']){
+        setStatus('Reading photo (' + (mode === 'contrast' ? 'pass 1 of 2' : 'pass 2 of 2') + ')…');
+        const ocrImg = await preprocessForOCR(c.idPhoto, mode);
+        const r = await worker.recognize(ocrImg);
+        const dd = (r && r.data) || {};
+        passes.push({ text: dd.text || '', words: dd.words || [] });
+      }
     } finally {
       await worker.terminate();
     }
-    const fields = parseLicenseText(text);
+    const parsed = passes.map(p => parseLicenseText(p.text));
+    const confs = passes.map((p, i)=>{
+      const o = {};
+      for (const k of Object.keys(parsed[i])) o[k] = fieldConfidence(p.words, parsed[i][k]);
+      return o;
+    });
+    const rec = reconcileFields(parsed[0], parsed[1], confs[0], confs[1]);
+    const fields = rec.fields;
     const keys = Object.keys(fields);
-    lastOcr = { cid: c.id, text, found: keys };
+    lastOcr = { cid: c.id, text: passes.map((p, i)=>'— read ' + (i + 1) + ' —\n' + p.text).join('\n'), found: keys };
     if (!keys.length){
       setStatus('Could not read anything useful — photo may be blurry, angled, or cropped. Type the fields manually.');
       audit('OCR no result', c.name || '(new customer)');
@@ -947,12 +971,20 @@ async function runLicenseOCR(c){
       if (c.verify && c.verify[k]) continue;
       if (!c[k]){ c[k] = fields[k]; filled.push(k); }
     }
+    c.ocrWarn = {};
+    for (const k of [...rec.disputed, ...rec.single]) if (filled.includes(k)) c.ocrWarn[k] = true;
+    if (!Object.keys(c.ocrWarn).length) delete c.ocrWarn;
     save(); custForm(c);
     audit('OCR auto-fill', (c.name || '(new customer)') + ': ' + (filled.join(', ') || 'nothing new'));
     const st = statusEl();
-    if (st) st.textContent = filled.length
-      ? 'Auto-filled: ' + filled.join(', ') + ' — confirm each against the photo.'
-      : 'Fields already have values — nothing new to fill. Confirm each against the photo.';
+    if (st){
+      let msg = filled.length
+        ? 'Auto-filled: ' + filled.join(', ') + ' — confirm each against the photo.'
+        : 'Fields already have values — nothing new to fill. Confirm each against the photo.';
+      const warn = Object.keys(c.ocrWarn || {});
+      if (warn.length) msg += ' ⚠ Double-check ' + warn.join(', ') + ' — the two reads disagreed or only one read found it.';
+      st.textContent = msg;
+    }
   }catch(err){
     setStatus('OCR failed: ' + (err && err.message ? err.message : err));
   }finally{
@@ -1007,7 +1039,7 @@ function custForm(idOrObj){
       <div><fieldset><legend>Details</legend><div class="row">
         ${CUST_FIELDS.map(f=>`<label class="f">${f.label}${f.req?' *':''}
           <input id="cf_${f.id}" value="${esc(c[f.id]||'')}">
-          ${c.verify&&c.verify[f.id]?'<span class="verified-flag">✓ verified from photo</span>':(c.idPhoto?`<span class="verify-flag">verify from photo <button type="button" class="btn sm ghost" data-vf="${f.id}">✓ confirm</button></span>`:'')}
+          ${c.verify&&c.verify[f.id]?'<span class="verified-flag">✓ verified from photo</span>':(c.idPhoto?`<span class="verify-flag">verify from photo <button type="button" class="btn sm ghost" data-vf="${f.id}">✓ confirm</button></span>`:'')}${c.ocrWarn&&c.ocrWarn[f.id]?'<span class="missing-tag">⚠ read uncertain — check carefully</span>':''}
         </label>`).join('')}
         </div><label class="f">Notes<textarea id="cf_notes" rows="2">${esc(c.notes||'')}</textarea></label>
       </fieldset></div>
@@ -1027,7 +1059,7 @@ function custForm(idOrObj){
     <div style="display:flex;gap:8px"><button class="btn" id="cf_save">Save customer</button>
     <button class="btn ghost" id="cf_cancel">Cancel</button></div></div>`;
   host.querySelectorAll('[data-vf]').forEach(b=>b.onclick=()=>{
-    c.verify=c.verify||{}; c.verify[b.dataset.vf]=true; save(); custForm(c);
+    c.verify=c.verify||{}; c.verify[b.dataset.vf]=true; if(c.ocrWarn) delete c.ocrWarn[b.dataset.vf]; save(); custForm(c);
   });
   document.getElementById('cf_photo').onchange = e=>{
     const file = e.target.files[0]; if(!file) return;
@@ -1086,7 +1118,10 @@ function vehForm(id){
   host.innerHTML = `<div class="panel"><h2>${id?'Edit':'New'} vehicle</h2>
     <fieldset><legend>VIN decode (NHTSA, free)</legend>
       <div class="row"><label class="f">VIN<input id="vf_vin" value="${esc(v.vin||'')}" maxlength="17" style="font-family:monospace"></label>
-      <label class="f">&nbsp;<span><button class="btn sm" id="vf_decode" type="button">Decode VIN</button></span></label></div>
+      <label class="f">&nbsp;<span><button class="btn sm" id="vf_decode" type="button">Decode VIN</button></span></label>
+      <label class="f">&nbsp;<span><button class="btn sm" id="vf_scan" type="button">📷 Scan barcode</button></span></label>
+      <label class="f">&nbsp;<span><button class="btn sm" id="vf_vinphoto" type="button">🖼 Read VIN from photo</button></span></label>
+      <input type="file" id="vf_vinfile" accept="image/*" capture="environment" style="display:none"></div>
       <div id="vf_decmsg" style="font-size:13px"></div>
     </fieldset>
     <fieldset><legend>Vehicle</legend><div class="row">
@@ -1100,6 +1135,7 @@ function vehForm(id){
     const vin = document.getElementById('vf_vin').value.trim().toUpperCase();
     const msg = document.getElementById('vf_decmsg');
     if(!isValidVIN(vin)){ msg.innerHTML='<span class="missing-tag">Invalid VIN — must be 17 characters (no I, O, Q).</span>'; return; }
+    const chkWarn = vinCheckDigitOK(vin) ? '' : '<div><span class="missing-tag">⚠ Check digit mismatch — one character of this VIN is probably wrong. Double-check it against the vehicle.</span></div>';
     msg.textContent = 'Decoding…';
     try{
       const r = await fetch('https://vpic.nhtsa.dot.gov/api/vehicles/DecodeVinValuesExtended/'+encodeURIComponent(vin)+'?format=json');
@@ -1109,20 +1145,97 @@ function vehForm(id){
       const map = {year:R.ModelYear, make:R.Make, model:R.Model, trim:R.Trim, bodyType:R.BodyClass,
                    engine:(R.DisplacementL?R.DisplacementL+'L ':'')+(R.EngineCylinders?R.EngineCylinders+' cyl':''), cyl:R.EngineCylinders};
       for (const [k,val] of Object.entries(map)) if(val && val!=='Not Applicable'){ v[k]=String(val).trim(); const inp=document.getElementById('vf_'+k); if(inp) inp.value=v[k]; }
-      msg.innerHTML = `<span style="color:var(--pine)">✓ Decoded: ${esc(R.ModelYear)} ${esc(R.Make)} ${esc(R.Model)}${R.Trim&&R.Trim!=='Not Applicable'?' '+esc(R.Trim):''}. Review and correct before saving.</span>`;
+      msg.innerHTML = chkWarn + `<span style="color:var(--pine)">✓ Decoded: ${esc(R.ModelYear)} ${esc(R.Make)} ${esc(R.Model)}${R.Trim&&R.Trim!=='Not Applicable'?' '+esc(R.Trim):''}. Review and correct before saving.</span>`;
       audit('vin decode', vin);
-    }catch(err){ msg.innerHTML = `<span class="missing-tag">Decode failed: ${esc(err.message)}. You can still enter the vehicle manually.</span>`; }
+    }catch(err){ msg.innerHTML = chkWarn + `<span class="missing-tag">Decode failed: ${esc(err.message)}. You can still enter the vehicle manually.</span>`; }
   };
   document.getElementById('vf_cancel').onclick = ()=>{host.innerHTML='';};
   document.getElementById('vf_save').onclick = ()=>{
     v.vin = document.getElementById('vf_vin').value.trim().toUpperCase();
-    if(v.vin && !isValidVIN(v.vin) && !confirm('VIN looks invalid. Save anyway?')) return;
+    if(v.vin && !isValidVIN(v.vin) && !confirm('VIN looks invalid (must be 17 characters, no I, O, Q). Save anyway?')) return;
+    if(v.vin && isValidVIN(v.vin) && !vinCheckDigitOK(v.vin) && !confirm("This VIN's check digit does not match — one character is probably mistyped. Save anyway?")) return;
     for (const f of VEH_FIELDS.filter(f=>f.id!=='vin')) v[f.id]=document.getElementById('vf_'+f.id).value.trim();
     v.notes=document.getElementById('vf_notes').value.trim();
     if(!store.vehicles.some(x=>x.id===v.id)) store.vehicles.push(v);
     save(); audit(id?'update vehicle':'create vehicle', v.vin||vehName(v.id));
     host.innerHTML=''; vVehicles();
   };
+  const scanBtn = document.getElementById('vf_scan');
+  if (scanBtn) scanBtn.onclick = ()=>openVinScanner(vin=>{
+    document.getElementById('vf_vin').value = vin;
+    document.getElementById('vf_decmsg').innerHTML = vinCheckDigitOK(vin)
+      ? '<span style="color:var(--pine)">✓ Barcode scanned: ' + esc(vin) + ' (check digit validates).</span>'
+      : '<span class="missing-tag">Barcode scanned: ' + esc(vin) + ' — check digit mismatch, verify it against the vehicle.</span>';
+    audit('vin barcode scan', vin);
+  });
+  const photoBtn = document.getElementById('vf_vinphoto');
+  const fileInp = document.getElementById('vf_vinfile');
+  if (photoBtn && fileInp){
+    photoBtn.onclick = ()=>fileInp.click();
+    fileInp.onchange = ()=>{
+      const f = fileInp.files[0];
+      if (f) readVinFromPhoto(f, vin=>{ const i = document.getElementById('vf_vin'); if (i) i.value = vin; },
+        t=>{ const m = document.getElementById('vf_decmsg'); if (m) m.textContent = t; });
+    };
+  }
+}
+
+/* ================= VIN capture: barcode scan + photo OCR =================
+ * Barcode: the VIN barcode on the door-jamb sticker / dash plate is
+ * Code 39 — the native BarcodeDetector (Chrome/Edge) reads it exactly,
+ * no OCR guessing. Photo OCR is the fallback: candidates come from
+ * parseVinText and a candidate whose check digit validates wins. */
+function openVinScanner(onVin){
+  if (!('BarcodeDetector' in window) || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
+    alert('Barcode scanning is not supported in this browser (it needs Chrome or Edge). Use "Read VIN from photo" instead, or type the VIN.');
+    return;
+  }
+  const wrap = document.createElement('div');
+  wrap.className = 'modal'; wrap.style.display = 'flex';
+  wrap.innerHTML = `<div class="modal-card"><h3 style="margin-top:0">Scan the VIN barcode</h3>
+    <video autoplay playsinline style="width:100%;border-radius:8px;background:#000"></video>
+    <p style="font-size:12px;color:var(--mut)">Point the camera at the VIN barcode on the door-jamb sticker or the dash plate.</p>
+    <div style="display:flex;gap:8px"><button class="btn ghost" type="button">Cancel</button></div></div>`;
+  document.body.appendChild(wrap);
+  let stream = null, timer = null, done = false;
+  const close = ()=>{ done = true; if (timer) clearInterval(timer); if (stream) stream.getTracks().forEach(t=>t.stop()); wrap.remove(); };
+  wrap.querySelector('button').onclick = close;
+  navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } }).then(s=>{
+    stream = s;
+    const vid = wrap.querySelector('video');
+    vid.srcObject = s;
+    const det = new BarcodeDetector({ formats: ['code_39','code_128','qr_code','data_matrix'] });
+    timer = setInterval(async ()=>{
+      if (done) return;
+      try{
+        const codes = await det.detect(vid);
+        for (const code of codes){
+          const raw = String(code.rawValue || '').toUpperCase().replace(/[^A-Z0-9]/g,'');
+          if (isValidVIN(raw)){ close(); onVin(raw); return; }
+        }
+      }catch(e){ /* keep trying until the user cancels */ }
+    }, 350);
+  }).catch(()=>{ close(); alert('Camera is not available here. Use "Read VIN from photo" instead.'); });
+}
+async function readVinFromPhoto(file, onVin, status){
+  const url = URL.createObjectURL(file);
+  try{
+    status('Loading OCR engine…');
+    const T = await loadTesseract();
+    const oem = (T.OEM && T.OEM.LSTM != null) ? T.OEM.LSTM : undefined;
+    const worker = await T.createWorker('eng', oem);
+    try{
+      status('Reading VIN photo…');
+      const img = await preprocessForOCR(url, 'contrast');
+      const r = await worker.recognize(img);
+      const cands = parseVinText((r && r.data && r.data.text) || '');
+      if (!cands.length){ status('No VIN found in that photo — try a closer, straight-on shot of the VIN plate or door sticker.'); return; }
+      const good = cands.find(cd => vinCheckDigitOK(cd.vin));
+      if (good){ onVin(good.vin); status('✓ VIN read from photo and its check digit validates: ' + good.vin); audit('vin photo read', good.vin); }
+      else { onVin(cands[0].vin); status('⚠ Best VIN read: ' + cands[0].vin + ' — its check digit does NOT validate, so one character may be misread. Verify it against the vehicle.'); audit('vin photo read (unverified)', cands[0].vin); }
+    } finally { await worker.terminate(); }
+  }catch(err){ status('VIN photo read failed: ' + (err && err.message ? err.message : err)); }
+  finally { URL.revokeObjectURL(url); }
 }
 
 /* ================= deals ================= */
