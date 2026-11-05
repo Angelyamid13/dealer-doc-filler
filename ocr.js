@@ -206,6 +206,86 @@ function extractAddress(lines){
   return { streetAddress: street, city, state, zip };
 }
 
+/* ---- Dual-pass reconciliation ------------------------------------------
+ * The app OCRs the license photo twice (two preprocessing variants) and
+ * parses each read. Fields where the reads agree are trusted; fields where
+ * they disagree go to the read whose source words Tesseract scored higher,
+ * and are reported as disputed so the user double-checks them; fields found
+ * by only one read are reported when they are error-prone (numbers). */
+
+/* Average Tesseract word confidence for the words that produced a value.
+   words: [{text, confidence}]. Returns 0-100, or null if no token matched. */
+export function fieldConfidence(words, value){
+  if (!words || !value) return null;
+  const toks = String(value).toUpperCase().replace(/[^A-Z0-9 ]/g,' ').split(' ')
+    .filter(t => t.length >= 3);
+  if (!toks.length) return null;
+  const clean = w => String(w.text || '').toUpperCase().replace(/[^A-Z0-9]/g,'');
+  const scores = [];
+  for (const t of toks){
+    let best = null;
+    for (const w of words){
+      const wt = clean(w);
+      if (wt && (wt === t || wt.includes(t) || t.includes(wt))){
+        if (best === null || w.confidence > best) best = w.confidence;
+      }
+    }
+    if (best !== null) scores.push(best);
+  }
+  if (!scores.length) return null;
+  return Math.round(scores.reduce((a,b)=>a+b,0) / scores.length);
+}
+
+const ERROR_PRONE = new Set(['dlNo','zip','streetAddress','dob']);
+export function reconcileFields(a, b, confA, confB){
+  const fields = {}, disputed = [], single = [];
+  const keys = new Set([...Object.keys(a || {}), ...Object.keys(b || {})]);
+  for (const k of keys){
+    const va = a ? a[k] : null, vb = b ? b[k] : null;
+    if (va && vb){
+      if (va === vb){ fields[k] = va; continue; }
+      const ca = (confA && confA[k] != null) ? confA[k] : 50;
+      const cb = (confB && confB[k] != null) ? confB[k] : 50;
+      fields[k] = cb > ca ? vb : va;
+      disputed.push(k);
+    } else if (va || vb){
+      fields[k] = va || vb;
+      if (ERROR_PRONE.has(k)) single.push(k);
+    }
+  }
+  return { fields, disputed, single };
+}
+
+/* ---- VIN photo OCR -------------------------------------------------------
+ * Finds VIN candidates in raw OCR text. VINs never contain I, O or Q, but
+ * OCR reads printed 1/0 as those letters, so candidates are built from a
+ * confusable-normalized copy (I->1, O->0, Q->0) and ranked by how many
+ * corrections each needed. The caller should prefer a candidate whose
+ * check digit validates (calc.js vinCheckDigitOK) — that turns OCR noise
+ * into a verifiable search. Returns up to 5 candidates, best first. */
+export function parseVinText(rawText){
+  if (!rawText) return [];
+  const norm = String(rawText).toUpperCase().replace(/O/g,'0').replace(/Q/g,'0').replace(/I/g,'1');
+  const corrected = String(rawText).toUpperCase();
+  const out = [];
+  const seen = new Set();
+  const runs = norm.match(/[A-Z0-9]{15,}/g) || [];
+  const runsRaw = corrected.match(/[A-Z0-9]{15,}/g) || [];
+  runs.forEach((run, ri)=>{
+    const raw = runsRaw[ri] || run;
+    for (let s = 0; s + 17 <= run.length; s++){
+      const win = run.slice(s, s + 17);
+      if (!/^[A-HJ-NPR-Z0-9]{17}$/.test(win) || seen.has(win)) continue;
+      seen.add(win);
+      let corr = 0;
+      for (let i = 0; i < 17; i++) if (raw[s + i] !== win[i]) corr++;
+      out.push({ vin: win, corrections: corr });
+    }
+  });
+  out.sort((x,y)=>x.corrections - y.corrections);
+  return out.slice(0, 5);
+}
+
 /* Main entry: raw OCR text -> customer fields. */
 export function parseLicenseText(rawText){
   const out = {};

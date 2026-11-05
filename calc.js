@@ -95,6 +95,21 @@ export function isValidVIN(vin) {
   return /^[A-HJ-NPR-Z0-9]{17}$/.test(v);
 }
 
+/* ---- VIN check digit (ISO 3779): position 9 is a built-in error check
+   computed from the other 16 characters. Catches single-character typos
+   and OCR misreads that pass the format test above. ---- */
+const VIN_VALUES = { '0':0,'1':1,'2':2,'3':3,'4':4,'5':5,'6':6,'7':7,'8':8,'9':9,
+  A:1,B:2,C:3,D:4,E:5,F:6,G:7,H:8,J:1,K:2,L:3,M:4,N:5,P:7,R:9,S:2,T:3,U:4,V:5,W:6,X:7,Y:8,Z:9 };
+const VIN_WEIGHTS = [8,7,6,5,4,3,2,10,0,9,8,7,6,5,4,3,2];
+export function vinCheckDigitOK(vin) {
+  const v = String(vin || "").trim().toUpperCase();
+  if (!isValidVIN(v)) return false;
+  let sum = 0;
+  for (let i = 0; i < 17; i++) sum += VIN_VALUES[v[i]] * VIN_WEIGHTS[i];
+  const rem = sum % 11;
+  return v[8] === (rem === 10 ? 'X' : String(rem));
+}
+
 /* ---- Deal-level derived values used across templates ---- */
 export function dealDerived(d) {
   const c = computeContract(d);
