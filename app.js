@@ -1413,7 +1413,12 @@ function vDocuments(){
   for(const t of TEMPLATES){
     host.appendChild(renderPage(d,t,{sel:t.id===tpl.id, screenHide:t.id!==tpl.id, calib:docCalib&&t.id===tpl.id}));
   }
+  fitDocFonts();
 }
+function fitDocFonts(){
+  document.querySelectorAll('.doc-page').forEach(p=>{ if(p.clientWidth) p.style.setProperty('--fs', (p.clientWidth*12.5/820)+'px'); });
+}
+window.addEventListener('resize', fitDocFonts);
 function doPrint(mode, tpl, deal){
   document.body.dataset.print = mode;
   audit('print', `${mode==='all'?('full package ('+TEMPLATES.length+' pages)'):tpl.name} — ${dealName(deal)}`);
