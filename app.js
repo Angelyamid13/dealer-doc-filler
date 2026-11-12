@@ -310,7 +310,7 @@ const TEMPLATES = [
     F('tc656OwnerAddr',5,29.2,40,{auto:'streetAddress'}), F('tc656OwnerCity',47,29.2,20,{auto:'city'}),
     F('tc656OwnerState',70,29.2,8,{auto:'state'}), F('tc656OwnerZip',80,29.2,12,{auto:'zip'}),
     F('tc656Year',5,87.4,7,{auto:'year'}), F('tc656Make',13.5,87.4,16,{auto:'make'}),
-    F('tc656Model',31,87.4,14,{auto:'series'}), F('tc656Color',46,87.4,12.5,{auto:'color'}),
+    F('tc656Model',31,87.4,14,{auto:'series'}), F('tc656Color',46,87.4,9.8,'s',{auto:'color'}),
     F('tc656Vin',56.5,87.4,36,{auto:'vin'}),
     F('tc656Cyl',5,90.3,7,{auto:'cyl'}), F('tc656Body',31,90.3,16,{auto:'bodyType'}),
     F('tc656Price',79,93.5,17.5,'a',{calc:'line1'}),
